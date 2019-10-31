@@ -1,0 +1,77 @@
+---
+- name: Configure mesos agent
+  hosts: sambahosts
+  become: yes
+  become_method: sudo
+  vars:
+    anonymousfolder: "/var/server/nginx/www/nginx.ascs.tech"
+    securedfolder: "/var/server/nginx/www/readonly"
+    sambauser: "centos"
+    sambapasswrd: "kaixin.com"
+    linuxuser: "centos"
+    sambaworkgroup: "WORKGROUP"
+  tasks:
+  - name: install wget
+    yum: name=wget state=present
+
+  - name: yum install firewalld
+    yum: name=firewalld  state=present
+
+  - name: add group smbgrp
+    group:
+      name: smbgrp 
+      state: present
+
+  - name: add linux user {{ linuxuser }} to smbgrp group
+    user:
+      name:  "{{ linuxuser }}"
+      group: smbgrp
+      state: present
+      
+  - name: yum install samba
+    yum: name=samba  state=latest
+
+  - name: yum install samba-client
+    yum: name=samba-client  state=present
+
+  - name: yum install samba-common
+    yum: name=samba-common  state=present
+
+  - name: enable samba serverice
+    service: name=smb  state=started   enabled=yes
+
+  - name: enable nmb serverice
+    service: name=nmb  state=started   enabled=yes
+
+
+  - name: open ports samba
+    firewalld: service=samba immediate=True permanent=True state=enabled
+
+  - name: create {{ securedfolder }}  directory
+    file: path="{{ securedfolder }}" owner=nobody   group=nobody state=directory mode=0777
+
+  - name: create the {{ anonymousfolder }}  directory
+    file: path={{ anonymousfolder }} owner=nobody group=nobody state=directory mode=0777
+
+  - name: "execute chcon -t {{ securedfolder }}"
+    shell: chcon -t samba_share_t {{ securedfolder }}
+
+  - name: "execute chcon -t {{ anonymousfolder }}"
+    shell: chcon -t samba_share_t {{ anonymousfolder }}
+
+  #- name: "添加centos 用户到 smbgrp"
+  #  shell: usermod -a -G smbgrp centos
+
+  - name: copy smb.conf template file
+    template: src=templates/smb.conf.j2 dest=/etc/samba/smb.conf owner=root group=root mode=0755
+
+  - name: "create samba user and set password"
+    shell: (echo {{ sambapasswrd }};echo {{ sambapasswrd }}) | smbpasswd -s -a  {{ sambauser }}
+
+  - name: enable samba serverice
+    service: name=smb  state=restarted
+
+  - name: enable nmb serverice
+    service: name=nmb  state=restarted
+
+
